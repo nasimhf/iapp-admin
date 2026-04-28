@@ -1,47 +1,26 @@
-import { put } from "@vercel/blob";
+import { put, head, del } from "@vercel/blob";
 const ADMIN_SECRET = "IAPP_2024_ULTRA_SECURE_KEY_bWFzdGVyX2FkbWlub25seQ";
+const DB_PATH = 'database.json';
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
-  // السماح بطلبات OPTIONS لـ CORS
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-  
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-  
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const { admin } = req.query;
-  if (admin !== ADMIN_SECRET) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  
+  if (admin !== ADMIN_SECRET) return res.status(401).json({ error: "Unauthorized" });
+
   try {
-    // قراءة الملف من الطلب
+    // --- 1. قراءة الملف المرفوع ---
     const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(chunk);
-    }
+    for await (const chunk of req) chunks.push(chunk);
     const buffer = Buffer.concat(chunks);
-    
-    // استخراج اسم الملف والمحتوى من multipart form data
     const contentType = req.headers["content-type"] || "";
     const boundary = contentType.split("boundary=")[1];
-    
-    if (!boundary) {
-      return res.status(400).json({ error: "No boundary found" });
-    }
-    
+    if (!boundary) return res.status(400).json({ error: "No boundary found" });
+
     const parts = buffer.toString().split("--" + boundary);
     let filename = "file";
     let fileData = null;
-    
     for (const part of parts) {
       if (part.includes("filename=")) {
         const match = part.match(/filename="([^"]+)"/);
@@ -52,29 +31,25 @@ export default async function handler(req, res) {
         break;
       }
     }
+    if (!fileData) return res.status(400).json({ error: "No file data found" });
+
+    // --- 2. رفع الملف إلى Blob ---
+    const blob = await put(filename, Buffer.from(fileData, "binary"), { access: "public", addRandomSuffix: true });
     
-    if (!fileData) {
-      return res.status(400).json({ error: "No file data found" });
-    }
-    
-    // رفع الملف إلى Vercel Blob
-    const blob = await put(filename, Buffer.from(fileData, "binary"), {
-      access: "public",
-      addRandomSuffix: true,
-    });
-    
-    // جلب الملفات المخزنة حالياً
-    let filesStore = [];
+    // --- 3. قراءة قاعدة البيانات الحالية من Blob (إذا وجدت) ---
+    let db = { files: [] };
     try {
-      const existing = process.env.FILES_STORE;
-      if (existing && existing !== "undefined") {
-        filesStore = JSON.parse(existing);
+      const existingDb = await head(DB_PATH);
+      if (existingDb) {
+        const response = await fetch(existingDb.url);
+        if (response.ok) db = await response.json();
       }
-    } catch (e) {
-      filesStore = [];
+    } catch (error) {
+      // تجاهل الخطأ إذا كانت قاعدة البيانات غير موجودة
+      console.log("Database not found, creating a new one.");
     }
-    
-    // إنشاء سجل للملف الجديد
+
+    // --- 4. إضافة الملف الجديد إلى قاعدة البيانات ---
     const newFile = {
       id: Date.now() + "_" + Math.random().toString(36).substr(2, 8),
       name: filename,
@@ -84,12 +59,12 @@ export default async function handler(req, res) {
       downloads: 0,
       date: new Date().toLocaleDateString("ar-EG")
     };
-    
-    filesStore.push(newFile);
-    process.env.FILES_STORE = JSON.stringify(filesStore);
-    
+    db.files.push(newFile);
+
+    // --- 5. حفظ قاعدة البيانات المحدثة في Blob ---
+    await put(DB_PATH, JSON.stringify(db, null, 2), { access: "public" });
+
     return res.status(200).json({ success: true, file: newFile });
-    
   } catch (err) {
     console.error("Upload error:", err);
     return res.status(500).json({ error: err.message });
