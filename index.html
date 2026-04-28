@@ -1,0 +1,144 @@
+cat > index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IAPP - لوحة تحكم المسؤول</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background: linear-gradient(135deg, #1E3A8A, #6366F1);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .admin-card {
+            background: white;
+            border-radius: 24px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        h1 { color: #1E3A8A; margin-bottom: 10px; }
+        .upload-area {
+            border: 3px dashed #ccc;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-area:hover { border-color: #6366F1; background: #f8f9ff; }
+        .file-list {
+            background: #f5f5f5;
+            border-radius: 15px;
+            padding: 20px;
+        }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .link-btn, .delete-btn {
+            padding: 8px 15px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            color: white;
+        }
+        .link-btn { background: #6366F1; }
+        .delete-btn { background: #EF4444; }
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            display: none;
+        }
+        .alert-success { background: #D1FAE5; color: #065F46; }
+        .alert-error { background: #FEE2E2; color: #991B1B; }
+        .secret-input {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            margin: 15px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="admin-card">
+        <h1>🔒 IAPP - لوحة تحكم المسؤول</h1>
+        <p>رفع الملفات إلى السحابة ومشاركتها مع أي شخص</p>
+        <div class="secret-input" id="secretDisplay"></div>
+        <div class="upload-area" id="uploadArea">
+            <div>📁 انقر أو اسحب الملف لرفعه</div>
+            <div style="font-size: 0.8rem; color: #888;">جميع الصيغ مدعومة - حتى 500MB</div>
+            <input type="file" id="fileInput" style="display: none;">
+        </div>
+        <div class="alert alert-success" id="successAlert"></div>
+        <div class="alert alert-error" id="errorAlert"></div>
+        <h3>📂 ملفاتي على السحابة</h3>
+        <div class="file-list" id="filesContainer"><div style="text-align: center;">جاري التحميل...</div></div>
+    </div>
+</div>
+<script>
+    const ADMIN_SECRET = "IAPP_2024_ULTRA_SECURE_KEY_bWFzdGVyX2FkbWlub25seQ";
+    async function apiCall(endpoint, options = {}) {
+        const response = await fetch(`/api/${endpoint}?admin=${ADMIN_SECRET}`, options);
+        if (!response.ok) { const error = await response.text(); throw new Error(error); }
+        return response.json();
+    }
+    document.getElementById('secretDisplay').innerHTML = `<strong>🔑 مفتاحك السري (احتفظ به):</strong><br><code>${ADMIN_SECRET}</code><p style="font-size: 0.8rem;">⚠️ لا تشارك هذا المفتاح!</p>`;
+    async function loadFiles() {
+        try {
+            const data = await apiCall('files');
+            const container = document.getElementById('filesContainer');
+            if (!data.files || data.files.length === 0) { container.innerHTML = '<p style="text-align: center;">📭 لا توجد ملفات</p>'; return; }
+            container.innerHTML = '';
+            for (const file of data.files) {
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                div.innerHTML = `<div><strong>📄 ${escapeHtml(file.name)}</strong><br><small>${file.sizeFormatted} | تحميل: ${file.downloads || 0} مرة</small></div>
+                    <div><button class="link-btn" data-url="${file.downloadUrl}">🔗 نسخ رابط التحميل</button>
+                    <button class="delete-btn" data-id="${file.id}">🗑️ حذف</button></div>`;
+                container.appendChild(div);
+            }
+            document.querySelectorAll('.link-btn').forEach(btn => btn.addEventListener('click', () => { navigator.clipboard.writeText(btn.dataset.url); showAlert('successAlert', '✅ تم نسخ الرابط!'); }));
+            document.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', async () => { if(confirm('حذف؟')) { await apiCall(`delete?id=${btn.dataset.id}`); showAlert('successAlert', '🗑️ تم الحذف'); loadFiles(); } }));
+        } catch(e) { document.getElementById('filesContainer').innerHTML = `<p style="color:red;">خطأ: ${e.message}</p>`; }
+    }
+    function setupUpload() {
+        const input = document.getElementById('fileInput');
+        const area = document.getElementById('uploadArea');
+        const upload = async (file) => {
+            const formData = new FormData();
+            formData.append('file', file);
+            const response = await fetch(`/api/upload?admin=${ADMIN_SECRET}`, { method: 'POST', body: formData });
+            if (!response.ok) throw new Error(await response.text());
+            showAlert('successAlert', `✅ تم رفع ${file.name}`);
+            loadFiles();
+        };
+        input.addEventListener('change', async (e) => { const file = e.target.files[0]; if(file) await upload(file); input.value = ''; });
+        area.addEventListener('click', () => input.click());
+        area.addEventListener('dragover', e => e.preventDefault());
+        area.addEventListener('drop', async (e) => { e.preventDefault(); const file = e.dataTransfer.files[0]; if(file) { input.files = e.dataTransfer.files; input.dispatchEvent(new Event('change')); } });
+    }
+    function showAlert(id, msg) { const el = document.getElementById(id); el.textContent = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 3000); }
+    function escapeHtml(str) { return str.replace(/[&<>]/g, function(m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]; }); }
+    setupUpload();
+    loadFiles();
+</script>
+</body>
+</html>
+EOF
