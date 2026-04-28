@@ -5,4 +5,3 @@ export default function handler(req, res) {
   const files = JSON.parse(process.env.FILES_STORE || "[]");
   return res.status(200).json({ files });
 }
-EOF 
