@@ -8,4 +8,3 @@ export default function handler(req, res) {
   process.env.FILES_STORE = JSON.stringify(files);
   return res.redirect(302, file.url);
 }
-EOF 
