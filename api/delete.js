@@ -12,4 +12,3 @@ export default async function handler(req, res) {
   process.env.FILES_STORE = JSON.stringify(files);
   return res.status(200).json({ success: true });
 }
-EOF 
