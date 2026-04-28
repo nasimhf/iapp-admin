@@ -44,4 +44,3 @@ export default async function handler(req, res) {
   }
 }
 function formatSize(b) { if (!b) return "0 Bytes"; const k = 1024, s = ["Bytes", "KB", "MB", "GB"]; const i = Math.floor(Math.log(b) / Math.log(k)); return parseFloat((b / Math.pow(k, i)).toFixed(2)) + " " + s[i]; }
-EOF 
