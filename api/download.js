@@ -1,4 +1,4 @@
-import { head } from "@vercel/blob";
+import { head, put } from "@vercel/blob";
 const DB_PATH = 'database.json';
 
 export default async function handler(req, res) {
@@ -6,7 +6,6 @@ export default async function handler(req, res) {
   if (!id) return res.status(400).json({ error: "Missing id" });
 
   try {
-    // قراءة قاعدة البيانات
     let db = { files: [] };
     const existingDb = await head(DB_PATH);
     if (existingDb) {
@@ -17,7 +16,6 @@ export default async function handler(req, res) {
     const file = db.files.find(f => f.id === id);
     if (!file) return res.status(404).json({ error: "File not found" });
 
-    // تحديث عدد التحميلات (يمكن تحسينه لاحقًا)
     file.downloads++;
     await put(DB_PATH, JSON.stringify(db, null, 2), { access: "public" });
 
