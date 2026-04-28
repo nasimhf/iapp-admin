@@ -1,5 +1,9 @@
 {
-  "functions": { "api/*.js": { "maxDuration": 60, "memory": 1024 } }
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  }
 }
 EOF 
-cat vercel.json 
